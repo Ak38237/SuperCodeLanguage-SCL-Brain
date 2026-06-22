@@ -40,28 +40,38 @@ async def bind_device(req: BindRequest):
 @app.post("/chat")
 async def chat(req: ChatRequest):
     """Main chat endpoint with hardware verification and AI rotation."""
-    # 1. Secure Device Verification
-    if not security.verify_device(req.user_id, req.hardware_id):
-        raise HTTPException(status_code=403, detail="Unauthorized Device Access! Hacker detected or Hardware mismatch.")
-    
-    # 2. Generate AI Response
-    response = await ai.generate_response(req.user_id, req.prompt)
-    
-    # 3. Save to Chat History
-    db = get_db()
-    db.table("chat_history").insert({
-        "user_id": req.user_id,
-        "role": "user",
-        "message": req.prompt
-    }).execute()
-    
-    db.table("chat_history").insert({
-        "user_id": req.user_id,
-        "role": "assistant",
-        "message": response
-    }).execute()
-    
-    return {"response": response}
+    try:
+        # 1. Secure Device Verification
+        if not security.verify_device(req.user_id, req.hardware_id):
+            raise HTTPException(status_code=403, detail="Unauthorized Device Access! Hacker detected or Hardware mismatch.")
+        
+        # 2. Generate AI Response
+        response = await ai.generate_response(req.user_id, req.prompt)
+        
+        # 3. Save to Chat History
+        try:
+            db = get_db()
+            db.table("chat_history").insert({
+                "user_id": req.user_id,
+                "role": "user",
+                "message": req.prompt
+            }).execute()
+            
+            db.table("chat_history").insert({
+                "user_id": req.user_id,
+                "role": "assistant",
+                "message": response
+            }).execute()
+        except Exception as db_e:
+            print(f"Chat history save error: {db_e}")
+            # We don't raise an error here because the AI response is more important than history
+        
+        return {"response": response}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Global Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.post("/memory/set")
 async def set_memory(req: MemoryRequest):
