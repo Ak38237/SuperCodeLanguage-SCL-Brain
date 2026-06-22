@@ -55,13 +55,26 @@ class AIEngine:
             return "Error: No active API keys available in the vault. Please add keys to the database."
 
         api_key = key_info["api_key"]
-        provider = key_info["provider"]
+        provider_raw = key_info["provider"]
+        
+        # SMART PROVIDER MAPPING: Check for keywords instead of exact match
+        provider = "FreeLLM"
+        provider_lower = provider_raw.lower()
+        
+        if "groq" in provider_lower:
+            provider = "Groq"
+        elif "openai" in provider_lower:
+            provider = "OpenAI"
+        elif "deepseek" in provider_lower:
+            provider = "DeepSeek"
+        elif "nvidia" in provider_lower:
+            provider = "Nvidia"
         
         endpoint = self.provider_endpoints.get(provider)
         if not endpoint:
-            return f"Error: Provider '{provider}' is not supported by the Brain. Please use Groq, OpenAI, DeepSeek, or Nvidia."
+            return f"Error: Provider '{provider_raw}' is not supported. Please use Groq, OpenAI, DeepSeek, or Nvidia."
 
-        print(f"DEBUG: Using {provider} key starting with: {api_key[:4]}... calling {endpoint}")
+        print(f"DEBUG: Map {provider_raw} -> {provider}. Key: {api_key[:4]}... calling {endpoint}")
         
         system_prompt = "You are the SCL Unified Brain, a helpful and high-energy AI agent. Respond concisely and supportively."
         if mode == "coding":
