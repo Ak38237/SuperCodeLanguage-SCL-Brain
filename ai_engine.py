@@ -42,7 +42,7 @@ class AIEngine:
 
     async def generate_response(self, user_id: str, prompt: str, mode: str = "general"):
         """
-        HIGH-PERFORMANCE ASYNC INTEGRATION: Calls LLM using httpx with specialized modes.
+        ULTRA-RESILIENT ASYNC INTEGRATION: Auto-retries on 401 errors to ensure zero-downtime.
         """
         try:
             memory = self.db.table("brain_memory").select("*").eq("user_id", user_id).execute()
@@ -50,71 +50,76 @@ class AIEngine:
         except Exception:
             context = ""
         
-        key_info = self.get_best_api_key()
-        if not key_info:
-            return "Error: No active API keys available in the vault. Please add keys to the database."
+        max_retries = 3
+        attempts = 0
+        
+        while attempts < max_retries:
+            attempts += 1
+            
+            key_info = self.get_best_api_key()
+            if not key_info:
+                return "Error: No active API keys available in the vault. Please add working keys."
 
-        api_key = key_info["api_key"]
-        provider_raw = key_info["provider"]
-        
-        # SMART PROVIDER MAPPING: Check for keywords instead of exact match
-        provider = "FreeLLM"
-        provider_lower = provider_raw.lower()
-        
-        if "groq" in provider_lower:
-            provider = "Groq"
-        elif "openai" in provider_lower:
-            provider = "OpenAI"
-        elif "deepseek" in provider_lower:
-            provider = "DeepSeek"
-        elif "nvidia" in provider_lower:
-            provider = "Nvidia"
-        
-        endpoint = self.provider_endpoints.get(provider)
-        if not endpoint:
-            return f"Error: Provider '{provider_raw}' is not supported. Please use Groq, OpenAI, DeepSeek, or Nvidia."
+            api_key = key_info["api_key"]
+            provider_raw = key_info["provider"]
+            
+            provider = "FreeLLM"
+            provider_lower = provider_raw.lower()
+            if "groq" in provider_lower: provider = "Groq"
+            elif "openai" in provider_lower: provider = "OpenAI"
+            elif "deepseek" in provider_lower: provider = "DeepSeek"
+            elif "nvidia" in provider_lower: provider = "Nvidia"
+            
+            endpoint = self.provider_endpoints.get(provider)
+            if not endpoint:
+                continue 
 
-        print(f"DEBUG: Map {provider_raw} -> {provider}. Key: {api_key[:4]}... calling {endpoint}")
-        
-        system_prompt = "You are the SCL Unified Brain, a helpful and high-energy AI agent. Respond concisely and supportively."
-        if mode == "coding":
-            system_prompt = "You are a World-Class Coding Mentor. Teach concept -> Step-by-Step Logic -> Optimized Code -> Pro Tips."
-        elif mode == "language":
-            system_prompt = "You are an expert Polyglot Coach. Provide Translation -> Pronunciation -> Grammar Breakdown -> Practice."
+            system_prompt = "You are the SCL Unified Brain, a helpful and high-energy AI agent. Respond concisely and supportively."
+            if mode == "coding":
+                system_prompt = "You are a World-Class Coding Mentor. Teach concept -> Step-by-Step Logic -> Optimized Code -> Pro Tips."
+            elif mode == "language":
+                system_prompt = "You are an expert Polyglot Coach. Provide Translation -> Pronunciation -> Grammar Breakdown -> Practice."
 
-        full_prompt = f"System Context:\n{context}\n\nUser: {prompt}"
-        
-        model_map = {
-            "Groq": "llama3-8b-8192",
-            "OpenAI": "gpt-3.5-turbo",
-            "DeepSeek": "deepseek-chat",
-            "Nvidia": "meta/llama-3.1-8b-instruct",
-            "FreeLLM": "llama3-8b-8192"
-        }
-        selected_model = model_map.get(provider, "llama3-8b-8192")
-        
-        payload = {
-            "model": selected_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 2048
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+            full_prompt = f"System Context:\n{context}\n\nUser: {prompt}"
+            
+            model_map = {
+                "Groq": "llama3-8b-8192",
+                "OpenAI": "gpt-3.5-turbo",
+                "DeepSeek": "deepseek-chat",
+                "Nvidia": "meta/llama-3.1-8b-instruct",
+                "FreeLLM": "llama3-8b-8192"
+            }
+            selected_model = model_map.get(provider, "llama3-8b-8192")
+            
+            payload = {
+                "model": selected_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": full_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
 
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(endpoint, json=payload, headers=headers)
-                response.raise_for_status()
-                result = response.json()
-                return result['choices'][0]['message']['content']
-        except httpx.HTTPStatusError as e:
-            return f"API Error ({e.response.status_code}): {e.response.text[:100]}"
-        except Exception as e:
-            return f"Cloud Brain Connection Error: {str(e)}"
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(endpoint, json=payload, headers=headers)
+                    if response.status_code == 401:
+                        print(f"LOG: Key {api_key[:4]}... failed (401). Retrying... ({attempts}/{max_retries})")
+                        continue 
+                    response.raise_for_status()
+                    result = response.json()
+                    return result['choices'][0]['message']['content']
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    continue
+                return f"API Error ({e.response.status_code}): {e.response.text[:100]}"
+            except Exception as e:
+                continue
+        
+        return "Error: All available API keys are currently failing. Please check your vault for working keys."
