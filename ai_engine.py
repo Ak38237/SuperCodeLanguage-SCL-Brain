@@ -40,9 +40,9 @@ class AIEngine:
             print(f"DB Error in get_best_api_key: {e}")
             return None
 
-    async def generate_response(self, user_id: str, prompt: str):
+    async def generate_response(self, user_id: str, prompt: str, mode: str = "general"):
         """
-        HIGH-PERFORMANCE ASYNC INTEGRATION: Calls LLM using httpx.
+        HIGH-PERFORMANCE ASYNC INTEGRATION: Calls LLM using httpx with specialized modes.
         """
         # 1. Get context from memory
         try:
@@ -60,17 +60,40 @@ class AIEngine:
         provider = key_info["provider"]
         endpoint = self.provider_endpoints.get(provider, self.provider_endpoints["FreeLLM"])
 
-        # 3. Prepare the Request
+        # 3. Specialized Prompting Logic
+        system_prompt = "You are the SCL Unified Brain, a helpful and high-energy AI agent. Respond concisely and supportively."
+        
+        if mode == "coding":
+            system_prompt = (
+                "You are a World-Class Coding Mentor. Your goal is to teach, not just code. "
+                "Follow this structure: \n"
+                "1. CONCEPT: Explain the logic in simple terms (Basic to Advanced).\n"
+                "2. STEP-BY-STEP: Break down the implementation into logical steps.\n"
+                "3. OPTIMIZED CODE: Provide clean, commented code.\n"
+                "4. PRO-TIPS: Tell the user how to make it faster or more professional.\n"
+                "Use a supportive, 'brotherly' tone and keep it high-energy!"
+            )
+        elif mode == "language":
+            system_prompt = (
+                "You are an expert Polyglot Language Coach. Do not just translate.\n"
+                "Follow this structure:\n"
+                "1. TRANSLATION: Accurate translation in the target language.\n"
+                "2. PRONUNCIATION: Write it in easy-to-read phonetic English.\n"
+                "3. GRAMMAR BREAKDOWN: Explain why specific words/tenses were used.\n"
+                "4. PRACTICE: Give the user one similar sentence to try themselves.\n"
+                "Be encouraging and friendly!"
+            )
+
         full_prompt = f"System Context:\n{context}\n\nUser: {prompt}"
         
         payload = {
             "model": "llama3-8b-8192" if provider in ["Groq", "FreeLLM"] else "gpt-3.5-turbo",
             "messages": [
-                {"role": "system", "content": "You are the SCL Unified Brain, a helpful and high-energy AI agent. Respond concisely and supportively."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": full_prompt}
             ],
             "temperature": 0.7,
-            "max_tokens": 1024
+            "max_tokens": 2048
         }
         
         headers = {
@@ -79,7 +102,6 @@ class AIEngine:
         }
 
         try:
-            # Use httpx.AsyncClient for non-blocking I/O
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()

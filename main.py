@@ -86,6 +86,16 @@ async def chat(req: ChatRequest):
         print(f"Global Server Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
+@app.get("/chat/history")
+async def get_chat_history(user_id: str):
+    """Fetches the last 50 messages for a user."""
+    try:
+        db = get_db()
+        response = db.table("chat_history").select("*").eq("user_id", user_id).order("created_at", ascending=False).limit(50).execute()
+        return {"history": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"History Error: {str(e)}")
+
 @app.post("/memory/set")
 async def set_memory(req: MemoryRequest):
     """Saves information to the AI's long-term memory."""
