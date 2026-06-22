@@ -58,6 +58,10 @@ class AIEngine:
 
         api_key = key_info["api_key"]
         provider = key_info["provider"]
+        
+        # DEBUG LOG: Print first 4 chars of key to Render logs to verify which key is being used
+        print(f"DEBUG: Using {provider} key starting with: {api_key[:4]}...")
+        
         endpoint = self.provider_endpoints.get(provider, self.provider_endpoints["FreeLLM"])
 
         # 3. Specialized Prompting Logic
