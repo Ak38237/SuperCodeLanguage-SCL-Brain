@@ -61,12 +61,14 @@ async def chat(req: ChatRequest):
         
         # 2. Fetch Short-Term Memory (Last 10 messages)
         db = get_db()
-        history_res = db.table("chat_history").select("role", "message").eq("user_id", req.user_id).order("created_at", ascending=False).limit(10).execute()
+        # Removed 'ascending=False' to prevent Supabase version conflict
+        history_res = db.table("chat_history").select("role, message, created_at").eq("user_id", req.user_id).order("created_at").execute()
         
-        # Reverse to get chronological order
+        # Sort by created_at in Python and take the last 10
         chat_history = []
         if history_res.data:
-            chat_history = history_res.data[::-1] 
+            sorted_history = sorted(history_res.data, key=lambda x: x.get("created_at", ""), reverse=False)
+            chat_history = sorted_history[-10:] # Get the 10 most recent messages
 
         # 3. Generate AI Response with History
         response = await ai.generate_response(req.user_id, req.prompt, history=chat_history)
