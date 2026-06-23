@@ -25,11 +25,16 @@ class AIEngine:
             return None
 
     async def generate_response(self, user_id: str, prompt: str, history: list = None, mode: str = "general"):
+        """
+        HYBRID MEMORY ENGINE: Combines Permanent Facts + Short-Term Conversation.
+        """
+        # 1. PERMANENT MEMORY: Fetch core facts about the user
         try:
             memory = self.db.table("brain_memory").select("*").eq("user_id", user_id).execute()
-            context = "\n".join([f"{m['context_key']}: {m['context_value']}" for m in memory.data]) if memory.data else ""
+            # Format: "Name: Ajay", "Preference: Python"
+            permanent_facts = "\n".join([f"{m['context_key']}: {m['context_value']}" for m in memory.data]) if memory.data else "No permanent facts yet."
         except Exception:
-            context = ""
+            permanent_facts = "No permanent facts available."
         
         max_retries = 3
         attempts = 0
@@ -51,13 +56,13 @@ class AIEngine:
             endpoint = self.provider_endpoints.get(provider)
             if not endpoint: continue
 
-            # BROTHERLY HINGLISH SYSTEM PROMPT
+            # SYSTEM PROMPT: Combining Personality + Permanent Knowledge
             system_prompt = (
                 "You are the SCL Unified Brain, a helpful, high-energy, and friendly AI agent. "
                 "IMPORTANT: Speak in a natural, brotherly HINGLISH style (mix of Hindi and English). "
                 "Don't be too formal. Use words like 'Bhai', 'Yaar', 'Ekdum', 'Mast'. "
-                "Keep it supportive, humorous, and high-energy. If the user asks something, "
-                "be like a supportive elder brother who is a tech genius."
+                f"USER PERMANENT MEMORY:\n{permanent_facts}\n\n"
+                "Use the above facts to personalize your conversation. If the user's name is mentioned, use it!"
             )
             
             if mode == "coding":
@@ -65,12 +70,16 @@ class AIEngine:
             elif mode == "language":
                 system_prompt += "\nMode: Language Coach. Structure: Translation -> Pronunciation -> Grammar Breakdown -> Practice."
 
+            # BUILD THE MESSAGE CHAIN
             messages = [{"role": "system", "content": system_prompt}]
+            
+            # Add short-term conversational history
             if history:
                 for msg in history:
                     messages.append({"role": msg["role"], "content": msg["message"]})
             
-            messages.append({"role": "user", "content": f"System Context:\n{context}\n\nUser: {prompt}"})
+            # Current prompt
+            messages.append({"role": "user", "content": prompt})
             
             model_map = {
                 "Groq": "llama-3.1-8b-instant",
