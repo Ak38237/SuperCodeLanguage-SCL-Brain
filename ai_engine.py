@@ -25,9 +25,6 @@ class AIEngine:
             return None
 
     async def generate_response(self, user_id: str, prompt: str, history: list = None, mode: str = "general"):
-        """
-        ULTRA-RESILIENT ASYNC INTEGRATION: Now with SHORT-TERM CONVERSATIONAL MEMORY.
-        """
         try:
             memory = self.db.table("brain_memory").select("*").eq("user_id", user_id).execute()
             context = "\n".join([f"{m['context_key']}: {m['context_value']}" for m in memory.data]) if memory.data else ""
@@ -54,22 +51,26 @@ class AIEngine:
             endpoint = self.provider_endpoints.get(provider)
             if not endpoint: continue
 
-            system_prompt = "You are the SCL Unified Brain, a helpful and high-energy AI agent."
-            if mode == "coding":
-                system_prompt = "You are a World-Class Coding Mentor. Teach concept -> Step-by-Step Logic -> Optimized Code -> Pro Tips."
-            elif mode == "language":
-                system_prompt = "You are an expert Polyglot Coach. Provide Translation -> Pronunciation -> Grammar Breakdown -> Practice."
-
-            # CONSTRUCTING THE MEMORY-AWARE MESSAGE LIST
-            messages = [{"role": "system", "content": f"{system_prompt}\n\nUser Context:\n{context}"}]
+            # BROTHERLY HINGLISH SYSTEM PROMPT
+            system_prompt = (
+                "You are the SCL Unified Brain, a helpful, high-energy, and friendly AI agent. "
+                "IMPORTANT: Speak in a natural, brotherly HINGLISH style (mix of Hindi and English). "
+                "Don't be too formal. Use words like 'Bhai', 'Yaar', 'Ekdum', 'Mast'. "
+                "Keep it supportive, humorous, and high-energy. If the user asks something, "
+                "be like a supportive elder brother who is a tech genius."
+            )
             
-            # Add previous conversation history
+            if mode == "coding":
+                system_prompt += "\nMode: Coding Mentor. Structure: Concept -> Step-by-Step Logic -> Optimized Code -> Pro Tips."
+            elif mode == "language":
+                system_prompt += "\nMode: Language Coach. Structure: Translation -> Pronunciation -> Grammar Breakdown -> Practice."
+
+            messages = [{"role": "system", "content": system_prompt}]
             if history:
                 for msg in history:
                     messages.append({"role": msg["role"], "content": msg["message"]})
             
-            # Add the current prompt
-            messages.append({"role": "user", "content": prompt})
+            messages.append({"role": "user", "content": f"System Context:\n{context}\n\nUser: {prompt}"})
             
             model_map = {
                 "Groq": "llama-3.1-8b-instant",
@@ -83,7 +84,7 @@ class AIEngine:
             payload = {
                 "model": selected_model,
                 "messages": messages,
-                "temperature": 0.7,
+                "temperature": 0.8,
                 "max_tokens": 2048
             }
             
