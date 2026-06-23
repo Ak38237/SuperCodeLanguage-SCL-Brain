@@ -24,7 +24,10 @@ class AIEngine:
         except Exception:
             return None
 
-    async def generate_response(self, user_id: str, prompt: str, mode: str = "general"):
+    async def generate_response(self, user_id: str, prompt: str, history: list = None, mode: str = "general"):
+        """
+        ULTRA-RESILIENT ASYNC INTEGRATION: Now with SHORT-TERM CONVERSATIONAL MEMORY.
+        """
         try:
             memory = self.db.table("brain_memory").select("*").eq("user_id", user_id).execute()
             context = "\n".join([f"{m['context_key']}: {m['context_value']}" for m in memory.data]) if memory.data else ""
@@ -57,6 +60,17 @@ class AIEngine:
             elif mode == "language":
                 system_prompt = "You are an expert Polyglot Coach. Provide Translation -> Pronunciation -> Grammar Breakdown -> Practice."
 
+            # CONSTRUCTING THE MEMORY-AWARE MESSAGE LIST
+            messages = [{"role": "system", "content": f"{system_prompt}\n\nUser Context:\n{context}"}]
+            
+            # Add previous conversation history
+            if history:
+                for msg in history:
+                    messages.append({"role": msg["role"], "content": msg["message"]})
+            
+            # Add the current prompt
+            messages.append({"role": "user", "content": prompt})
+            
             model_map = {
                 "Groq": "llama-3.1-8b-instant",
                 "OpenAI": "gpt-3.5-turbo",
@@ -68,17 +82,16 @@ class AIEngine:
             
             payload = {
                 "model": selected_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"System Context:\n{context}\n\nUser: {prompt}"}
-                ],
+                "messages": messages,
                 "temperature": 0.7,
                 "max_tokens": 2048
             }
             
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(endpoint, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+                    response = await client.post(endpoint, json=payload, headers=headers)
                     if response.status_code == 401: continue
                     response.raise_for_status()
                     return response.json()['choices'][0]['message']['content']

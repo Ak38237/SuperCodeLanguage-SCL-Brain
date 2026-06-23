@@ -53,29 +53,28 @@ async def bind_device(req: BindRequest):
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    """Main chat endpoint with hardware verification and AI rotation."""
+    """Main chat endpoint with hardware verification, CONVERSATIONAL MEMORY, and AI rotation."""
     try:
         # 1. Secure Device Verification
         if not security.verify_device(req.user_id, req.hardware_id):
             raise HTTPException(status_code=403, detail="Unauthorized Device Access!")
         
-        # 2. Generate AI Response
-        response = await ai.generate_response(req.user_id, req.prompt)
+        # 2. Fetch Short-Term Memory (Last 10 messages)
+        db = get_db()
+        history_res = db.table("chat_history").select("role", "message").eq("user_id", req.user_id).order("created_at", ascending=False).limit(10).execute()
         
-        # 3. Save to Chat History (Non-blocking try-except)
+        # Reverse to get chronological order
+        chat_history = []
+        if history_res.data:
+            chat_history = history_res.data[::-1] 
+
+        # 3. Generate AI Response with History
+        response = await ai.generate_response(req.user_id, req.prompt, history=chat_history)
+        
+        # 4. Save to Chat History (Non-blocking)
         try:
-            db = get_db()
-            db.table("chat_history").insert({
-                "user_id": req.user_id,
-                "role": "user",
-                "message": req.prompt
-            }).execute()
-            
-            db.table("chat_history").insert({
-                "user_id": req.user_id,
-                "role": "assistant",
-                "message": response
-            }).execute()
+            db.table("chat_history").insert({"user_id": req.user_id, "role": "user", "message": req.prompt}).execute()
+            db.table("chat_history").insert({"user_id": req.user_id, "role": "assistant", "message": response}).execute()
         except Exception as db_e:
             print(f"Chat history save error: {db_e}")
         
